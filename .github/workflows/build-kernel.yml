@@ -18,19 +18,19 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2-utils lz4 mkbootimg net-tools ninja-build openssl python3-dev rsync u-boot-tools zip
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git
 
-      - name: Clone GKI Toolchain (Clang)
+      - name: Set up Clang Toolchain
         run: |
-          mkdir toolchain
-          cd toolchain
-          wget https://googlesource.com
-          tar -xf clang-r485591.tar.gz
-          echo "$(pwd)/bin" >> $GITHUB_PATH
+          # Скачиваем стабильный prebuilt-компилятор AOSP Clang напрямую через git (так ссылка никогда не умрет)
+          git clone https://googlesource.com -b main --depth=1 toolchain
+          # Находим актуальную папку с clang и добавляем её в PATH
+          CLANG_BIN=$(find toolchain -maxdepth 2 -name "bin" -type d | head -n 1)
+          echo "$CLANG_BIN" >> $GITHUB_PATH
 
-      - name: Clone Xiaomi Kernel Source
+      - name: Clone Xiaomi Kernel Source (niyongqi)
         run: |
-          git clone https://github.com -b malachite-u-oss --depth=1 kernel-source
+          git clone https://github.com --depth=1 kernel-source
 
       - name: Setup KernelSU
         run: |
