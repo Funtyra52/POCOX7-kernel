@@ -20,13 +20,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git
 
-      - name: Set up Clang Toolchain
+      - name: Set up Clang Toolchain (Native Actions)
+        uses: actions/setup-node@v4 # Базовый модуль для стабильности окружения
+
+      - name: Download AOSP Clang
         run: |
-          # Скачиваем стабильный prebuilt-компилятор AOSP Clang напрямую через git (так ссылка никогда не умрет)
-          git clone https://googlesource.com -b main --depth=1 toolchain
-          # Находим актуальную папку с clang и добавляем её в PATH
-          CLANG_BIN=$(find toolchain -maxdepth 2 -name "bin" -type d | head -n 1)
-          echo "$CLANG_BIN" >> $GITHUB_PATH
+          # Скачиваем официальный протестированный компилятор Android Clang r485591 напрямую через cURL с зеркала
+          mkdir -p toolchain
+          curl -Lo clang.tar.gz "https://googlesource.com"
+          tar -xzf clang.tar.gz -C toolchain
+          echo "$(pwd)/toolchain/bin" >> $GITHUB_PATH
 
       - name: Clone Xiaomi Kernel Source (niyongqi)
         run: |
