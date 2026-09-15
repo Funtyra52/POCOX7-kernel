@@ -52,8 +52,17 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
         with:
-          repository: 'MiCode/Xiaomi_Kernel_OpenSource'
-          ref: 'malachite-u-oss'
+          repository: 'malachite-devs/android_kernel_xiaomi_malachite'
+          ref: 'lineage-21'
+          path: 'kernel-source'
+        continue-on-error: true
+
+      - name: Fallback Clone
+        if: steps.Clone.outcome == 'failure'
+        uses: actions/checkout@v4
+        with:
+          repository: 'SonalSinha5/android_kernel_xiaomi_malachite'
+          ref: 'fourteen'
           path: 'kernel-source'
 
       - name: KSU
@@ -96,19 +105,8 @@ jobs:
           export OBJCOPY=llvm-objcopy
           export OBJDUMP=llvm-objdump
           export STRIP=llvm-strip
-          CFG=$(find arch/arm64/configs/ \
-            -name "*malachite*" -o \
-            -name "gki_defconfig" | \
-            head -n 1 | xargs basename)
-          if [ -z "$CFG" ]; then
-            P=$(find . \
-              -name "*malachite*_defconfig" -o \
-              -name "gki_defconfig" | \
-              head -n 1)
-            mkdir -p arch/arm64/configs/
-            cp "$P" arch/arm64/configs/auto_defconfig
-            CFG="auto_defconfig"
-          fi
+          
+          CFG=$(find arch/arm64/configs/ -name "*malachite*_defconfig" -o -name "gki_defconfig" | head -n 1 | xargs basename)
           echo "=== CONFIG: $CFG ==="
           make "$CFG"
           echo "CONFIG_KSU=y" >> .config
