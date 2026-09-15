@@ -96,7 +96,21 @@ jobs:
           export OBJCOPY=llvm-objcopy
           export OBJDUMP=llvm-objdump
           export STRIP=llvm-strip
-          make malachite_user_defconfig
+          CFG=$(find arch/arm64/configs/ \
+            -name "*malachite*" -o \
+            -name "gki_defconfig" | \
+            head -n 1 | xargs basename)
+          if [ -z "$CFG" ]; then
+            P=$(find . \
+              -name "*malachite*_defconfig" -o \
+              -name "gki_defconfig" | \
+              head -n 1)
+            mkdir -p arch/arm64/configs/
+            cp "$P" arch/arm64/configs/auto_defconfig
+            CFG="auto_defconfig"
+          fi
+          echo "=== CONFIG: $CFG ==="
+          make "$CFG"
           echo "CONFIG_KSU=y" >> .config
           make -j$(nproc)
 
