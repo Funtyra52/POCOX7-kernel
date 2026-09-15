@@ -52,17 +52,8 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
         with:
-          repository: 'malachite-devs/android_kernel_xiaomi_malachite'
-          ref: 'lineage-21'
-          path: 'kernel-source'
-        continue-on-error: true
-
-      - name: Fallback Clone
-        if: steps.Clone.outcome == 'failure'
-        uses: actions/checkout@v4
-        with:
-          repository: 'SonalSinha5/android_kernel_xiaomi_malachite'
-          ref: 'fourteen'
+          repository: 'MiCode/Xiaomi_Kernel_OpenSource'
+          ref: 'malachite-u-oss'
           path: 'kernel-source'
 
       - name: KSU
@@ -71,7 +62,7 @@ jobs:
           P1="https://githubusercontent.com"
           P2="/tiann/KernelSU"
           P3="/main/kernel/setup.sh"
-          curl -LSs "$P1$P2$P3" | bash -
+          curl -LSs "${P1}${P2}${P3}" | bash -
 
       - name: Overclock
         run: |
@@ -106,11 +97,12 @@ jobs:
           export OBJDUMP=llvm-objdump
           export STRIP=llvm-strip
           
-          CFG=$(find arch/arm64/configs/ -name "*malachite*_defconfig" -o -name "gki_defconfig" | head -n 1 | xargs basename)
-          echo "=== CONFIG: $CFG ==="
-          make "$CFG"
+          # На GKI ядрах Xiaomi сначала собирается базовая конфигурация Google
+          make gki_defconfig
           echo "CONFIG_KSU=y" >> .config
-          make -j$(nproc)
+          
+          # Запускаем компиляцию основного ядра без сборки внешних модулей
+          make -j$(nproc) Image
 
       - name: Upload
         uses: actions/upload-artifact@v4
@@ -118,4 +110,3 @@ jobs:
           name: Poco_X7_Kernel
           path: |
             kernel-source/arch/arm64/boot/Image
-            kernel-source/**/*.ko
