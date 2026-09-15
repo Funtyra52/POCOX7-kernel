@@ -20,9 +20,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git clang lld
 
-      - name: Clone Xiaomi Kernel Source (niyongqi)
+      - name: Clone Xiaomi Kernel Source (MiCode)
         run: |
-          git clone https://github.com --depth=1 kernel-source
+          # Клонируем официальную ветку malachite-u-oss, которую ты нашел в самом начале
+          git clone --depth=1 --branch=malachite-u-oss https://github.com kernel-source
 
       - name: Setup KernelSU
         run: |
