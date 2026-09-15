@@ -48,12 +48,16 @@ jobs:
             fi
           done
 
-      - name: Build
-        run: |
+            - name: Build
+          run: |
           cd kernel-source
+          
+          # Задаем жесткие переменные кросс-компиляции
           export ARCH=arm64
           export SUBARCH=arm64
           export HEADER_ARCH=arm64
+          
+          # Указываем использовать Clang и LLVM для всех этапов (включая хост-скрипты)
           export CC=clang
           export LD=ld.lld
           export AR=llvm-ar
@@ -61,22 +65,24 @@ jobs:
           export OBJCOPY=llvm-objcopy
           export OBJDUMP=llvm-objdump
           export STRIP=llvm-strip
+          export HOSTCC=clang
+          export HOSTCXX=clang++
+          export HOSTAR=llvm-ar
+          export HOSTLD=ld.lld
           
           # Генерируем базовый конфиг
           make gki_defconfig
           
-          # ЖЕСТКИЙ ФИКС: генерируем заголовки до сборки, чтобы обойти ошибку HDRINST
-          make -j$(nproc) headers_install
-          
-          # Отключаем сбойную подсистему BTF-отладки
+          # Принудительно отключаем подсистему BTF-отладки
           echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
           echo "# CONFIG_DEBUG_INFO_BTF is not set" >> .config
           
           # Принудительно включаем KernelSU
           echo "CONFIG_KSU=y" >> .config
           
-          # Компилируем строго только файл самого ядра Image
+          # Компилируем строго файл самого ядра Image
           make -j$(nproc) Image
+
 
       - name: Upload
         uses: actions/upload-artifact@v4
