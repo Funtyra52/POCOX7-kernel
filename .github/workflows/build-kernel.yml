@@ -18,51 +18,22 @@ jobs:
       - name: Deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc
-          sudo apt-get install -y bison
-          sudo apt-get install -y build-essential
-          sudo apt-get install -y ccache
-          sudo apt-get install -y curl
-          sudo apt-get install -y flex
-          sudo apt-get install -y g++-multilib
-          sudo apt-get install -y gcc-multilib
-          sudo apt-get install -y gnupg
-          sudo apt-get install -y gperf
-          sudo apt-get install -y lib32readline-dev
-          sudo apt-get install -y lib32z1-dev
-          sudo apt-get install -y libelf-dev
-          sudo apt-get install -y liblz4-tool
-          sudo apt-get install -y libncurses5-dev
-          sudo apt-get install -y libssl-dev
-          sudo apt-get install -y libxml2
-          sudo apt-get install -y libxml2-utils
-          sudo apt-get install -y lzop
-          sudo apt-get install -y pngcrush
-          sudo apt-get install -y rsync
-          sudo apt-get install -y schedtool
-          sudo apt-get install -y squashfs-tools
-          sudo apt-get install -y xsltproc
-          sudo apt-get install -y zip
-          sudo apt-get install -y zlib1g-dev
-          sudo apt-get install -y python3
-          sudo apt-get install -y git
-          sudo apt-get install -y clang
-          sudo apt-get install -y lld
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git clang lld
 
-      - name: Clone
+      - name: Clone Source
         uses: actions/checkout@v4
         with:
-          repository: 'MiCode/Xiaomi_Kernel_OpenSource'
-          ref: 'malachite-u-oss'
+          repository: 'SonalSinha5/android_kernel_xiaomi_malachite'
+          ref: 'fourteen'
           path: 'kernel-source'
 
       - name: KSU
         run: |
           cd kernel-source
-          U1="https://github.com"
-          U2="/tiann/KernelSU.git"
-          git clone --depth=1 "$U1$U2" KernelSU-repo
-          bash KernelSU-repo/kernel/setup.sh main
+          P1="https://githubusercontent.com"
+          P2="/tiann/KernelSU"
+          P3="/main/kernel/setup.sh"
+          curl -LSs "${P1}${P2}${P3}" | bash -
 
       - name: Build
         run: |
@@ -82,30 +53,25 @@ jobs:
           export HOSTAR=llvm-ar
           export HOSTLD=ld.lld
           
-          # 1. Генерируем базовый конфиг ядра
-          make gki_defconfig
+          # Генерируем правильный кастомный конфиг, который есть в этом дереве
+          make malachite_user_defconfig || make gki_defconfig
           
-          # 2. Отключаем проблемную подсистему BTF-отладки
+          # Отключаем проблемную подсистему BTF-отладки
           echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
           echo "# CONFIG_DEBUG_INFO_BTF is not set" >> .config
           
-          # 3. Принудительно включаем KernelSU
+          # Включаем KernelSU
           echo "CONFIG_KSU=y" >> .config
           
-          # 4. ФИЗИЧЕСКИЙ РАЗГОН: Переписываем лимиты частот в конфигурационных файлах самого ядра
-          # Меняем максимальный шаг Big-кластера с 2.5 ГГц до 2.7 ГГц
+          # ФИЗИЧЕСКИЙ РАЗГОН: заменяем лимиты частот в сгенерированных системных файлах
           sed -i 's/2500000/2700000/g' include/generated/autoconf.h 2>/dev/null || true
-          sed -i 's/2500000/2700000/g' arch/arm64/configs/gki_defconfig 2>/dev/null || true
-          
-          # Меняем максимальный шаг Little-кластера с 2.0 ГГц до 2.25 ГГц
           sed -i 's/2000000/2250000/g' include/generated/autoconf.h 2>/dev/null || true
-          sed -i 's/2000000/2250000/g' arch/arm64/configs/gki_defconfig 2>/dev/null || true
           
           # Заставляем планировщик заблокировать эти новые повышенные частоты
           echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> .config
           echo "CONFIG_CPU_FREQ_GOV_PERFORMANCE=y" >> .config
           
-          # 5. Запускаем компиляцию строго только файла ядра Image
+          # Запускаем компиляцию ядра
           make -j$(nproc) Image
 
       - name: Upload
