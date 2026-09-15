@@ -1,0 +1,76 @@
+name: Build Poco X7 Kernel with KSU and Overclock
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          temp-reserve-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libsdl1.1-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git
+
+      - name: Clone GKI Toolchain (Clang)
+        run: |
+          mkdir toolchain
+          cd toolchain
+          wget https://googlesource.com
+          tar -xf clang-r485591.tar.gz
+          echo "$(pwd)/bin" >> $GITHUB_PATH
+
+      - name: Clone Xiaomi Kernel Source
+        run: |
+          git clone https://github.com -b malachite-u-oss --depth=1 kernel-source
+
+      - name: Setup KernelSU
+        run: |
+          cd kernel-source
+          curl -LSs "https://githubusercontent.com" | bash -
+
+      - name: Patch CPU Overclock
+        run: |
+          cd kernel-source
+          echo "==== ПАТЧИНГ РАЗГОНА ПРОЦЕССОРА ===="
+          find . -type f \( -name "*.dts" -o -name "*.dtsi" -o -name "*dvfs*.c" -o -name "*opp*.c" -o -name "*.h" \) | while read -r file; do
+            if grep -q "2500000" "$file"; then
+              echo "Патчим Big-ядра в: $file"
+              sed -i 's/2500000/2700000/g' "$file"
+            fi
+            if grep -q "2000000" "$file"; then
+              echo "Патчим Little-ядра в: $file"
+              sed -i 's/2000000/2250000/g' "$file"
+            fi
+          done
+          echo "==== Патчинг успешно завершен ===="
+
+      - name: Build Kernel
+        run: |
+          cd kernel-source
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export HEADER_ARCH=arm64
+          export CC=clang
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CROSS_COMPILE=aarch64-linux-android-
+          
+          make malachite_user_defconfig
+          echo "CONFIG_KSU=y" >> .config
+          make -j$(nproc)
+
+      - name: Upload Kernel Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Poco_X7_OC_KSU_Kernel
+          path: |
+            kernel-source/arch/arm64/boot/Image
+            kernel-source/**/*.ko
