@@ -18,7 +18,36 @@ jobs:
       - name: Deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git clang lld
+          sudo apt-get install -y bc
+          sudo apt-get install -y bison
+          sudo apt-get install -y build-essential
+          sudo apt-get install -y ccache
+          sudo apt-get install -y curl
+          sudo apt-get install -y flex
+          sudo apt-get install -y g++-multilib
+          sudo apt-get install -y gcc-multilib
+          sudo apt-get install -y gnupg
+          sudo apt-get install -y gperf
+          sudo apt-get install -y lib32readline-dev
+          sudo apt-get install -y lib32z1-dev
+          sudo apt-get install -y libelf-dev
+          sudo apt-get install -y liblz4-tool
+          sudo apt-get install -y libncurses5-dev
+          sudo apt-get install -y libssl-dev
+          sudo apt-get install -y libxml2
+          sudo apt-get install -y libxml2-utils
+          sudo apt-get install -y lzop
+          sudo apt-get install -y pngcrush
+          sudo apt-get install -y rsync
+          sudo apt-get install -y schedtool
+          sudo apt-get install -y squashfs-tools
+          sudo apt-get install -y xsltproc
+          sudo apt-get install -y zip
+          sudo apt-get install -y zlib1g-dev
+          sudo apt-get install -y python3
+          sudo apt-get install -y git
+          sudo apt-get install -y clang
+          sudo apt-get install -y lld
 
       - name: Clone
         uses: actions/checkout@v4
@@ -30,34 +59,24 @@ jobs:
       - name: KSU
         run: |
           cd kernel-source
-          STR1="https://raw."
-          STR2="githubusercontent."
-          STR3="com/tiann/KernelSU/main/kernel/setup.sh"
-          curl -LSs "${STR1}${STR2}${STR3}" | bash -
+          P1="https://githubusercontent.com"
+          P2="/tiann/KernelSU"
+          P3="/main/kernel/setup.sh"
+          curl -LSs "$P1$P2$P3" | bash -
 
       - name: Overclock
         run: |
           cd kernel-source
           echo "=== PATCH ==="
-          find . -type f \( -name "*.dts" -o -name "*.dtsi" -o -name "*dvfs*.c" -o -name "*opp*.c" -o -name "*.h" \) | while read -r file; do
-            if grep -q "2500000" "$file"; then
-              sed -i 's/2500000/2700000/g' "$file"
-            fi
-            if grep -q "2000000" "$file"; then
-              sed -i 's/2000000/2250000/g' "$file"
-            fi
-          done
+          sed -i 's/2500000/2700000/g' $(grep -rl "2500000" arch/arm64/configs/ drivers/misc/mediatek/ 2>/dev/null || true)
+          sed -i 's/2000000/2250000/g' $(grep -rl "2000000" arch/arm64/configs/ drivers/misc/mediatek/ 2>/dev/null || true)
 
-            - name: Build
-          run: |
+      - name: Build
+        run: |
           cd kernel-source
-          
-          # Задаем жесткие переменные кросс-компиляции
           export ARCH=arm64
           export SUBARCH=arm64
           export HEADER_ARCH=arm64
-          
-          # Указываем использовать Clang и LLVM для всех этапов (включая хост-скрипты)
           export CC=clang
           export LD=ld.lld
           export AR=llvm-ar
@@ -69,20 +88,11 @@ jobs:
           export HOSTCXX=clang++
           export HOSTAR=llvm-ar
           export HOSTLD=ld.lld
-          
-          # Генерируем базовый конфиг
           make gki_defconfig
-          
-          # Принудительно отключаем подсистему BTF-отладки
           echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
           echo "# CONFIG_DEBUG_INFO_BTF is not set" >> .config
-          
-          # Принудительно включаем KernelSU
           echo "CONFIG_KSU=y" >> .config
-          
-          # Компилируем строго файл самого ядра Image
           make -j$(nproc) Image
-
 
       - name: Upload
         uses: actions/upload-artifact@v4
