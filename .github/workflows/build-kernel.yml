@@ -20,7 +20,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git clang lld
 
-      - name: Clone
+      - name: Clone Source
         uses: actions/checkout@v4
         with:
           repository: 'MiCode/Xiaomi_Kernel_OpenSource'
@@ -30,7 +30,7 @@ jobs:
       - name: KSU
         run: |
           cd kernel-source
-          P1="https://raw.githubusercontent.com"
+          P1="https://githubusercontent.com"
           P2="/tiann/KernelSU"
           P3="/main/kernel/setup.sh"
           curl -LSs "${P1}${P2}${P3}" | bash -
@@ -51,36 +51,20 @@ jobs:
       - name: Build
         run: |
           cd kernel-source
+          
+          # Настраиваем окружение компилятора
           export ARCH=arm64
           export SUBARCH=arm64
           export HEADER_ARCH=arm64
           export CC=clang
           export LD=ld.lld
-          export AR=llvm-ar
-          export NM=llvm-nm
-          export OBJCOPY=llvm-objcopy
-          export OBJDUMP=llvm-objdump
-          export STRIP=llvm-strip
           
-          CFG=$(find arch/arm64/configs/ -name "*malachite*" -o -name "gki_defconfig" | head -n 1 | xargs basename)
-          if [ -z "$CFG" ]; then
-            P=$(find . -name "*malachite*_defconfig" -o -name "gki_defconfig" | head -n 1)
-            mkdir -p arch/arm64/configs/
-            cp "$P" arch/arm64/configs/auto_defconfig
-            CFG="auto_defconfig"
-          fi
+          # Запуск сборки через правильный GKI скрипт, который обходит ошибки HDRINST
+          # Он сначала собирает правильное окружение, а затем компилирует Image
+          build/build.sh
           
-          echo "=== CONFIG: $CFG ==="
-          make "$CFG"
-          
-          echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
-          echo "# CONFIG_DEBUG_INFO_BTF is not set" >> .config
-          echo "CONFIG_KSU=y" >> .config
-          
-          make -j$(nproc) Image
-
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: Poco_X7_Kernel
-          path: kernel-source/arch/arm64/boot/Image
+          path: out/android*/dist/Image
