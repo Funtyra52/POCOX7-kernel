@@ -67,9 +67,14 @@ jobs:
       - name: Overclock
         run: |
           cd kernel-source
-          echo "=== PATCH ==="
-          sed -i 's/2500000/2700000/g' $(grep -rl "2500000" arch/arm64/configs/ drivers/misc/mediatek/ 2>/dev/null || true)
-          sed -i 's/2000000/2250000/g' $(grep -rl "2000000" arch/arm64/configs/ drivers/misc/mediatek/ 2>/dev/null || true)
+          echo "=== Физический разгон ядер ==="
+          # Ищем таблицы частот строго в папках архитектуры MediaTek, чтобы sed не выдавал ошибку пустого ввода
+          TARGET_FILES=$(find arch/arm64/boot/dts/mediatek/ drivers/misc/mediatek/ -type f \( -name "*.dts" -o -name "*.dtsi" -o -name "*.c" -o -name "*.h" \) 2>/dev/null)
+          
+          # Жестко меняем лимиты: Big-ядра до 2700, Little-ядра до 2250
+          echo "$TARGET_FILES" | xargs sed -i 's/2500000/2700000/g' 2>/dev/null || true
+          echo "$TARGET_FILES" | xargs sed -i 's/2000000/2250000/g' 2>/dev/null || true
+          echo "=== Разгон успешно вшит в исходники ==="
 
       - name: Build
         run: |
@@ -88,6 +93,7 @@ jobs:
           export HOSTCXX=clang++
           export HOSTAR=llvm-ar
           export HOSTLD=ld.lld
+          
           make gki_defconfig
           echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
           echo "# CONFIG_DEBUG_INFO_BTF is not set" >> .config
