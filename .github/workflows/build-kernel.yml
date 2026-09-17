@@ -62,21 +62,24 @@ jobs:
 
       - name: Apply Performance Tweaks
         run: |
-          cd kernel/common
+          CONFIG_FILE="kernel/common/arch/arm64/configs/gki_defconfig"
 
           # Отключение стандартного schedutil
-          sed -i 's/CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y/# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set/' arch/arm64/configs/gki_defconfig
+          sed -i 's/CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y/# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set/' "$CONFIG_FILE"
 
-          # Добавление производительного шедулера, MGLRU и Kyber I/O
-          echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_LRU_GEN=y" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_LRU_GEN_ENABLED=y" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_MQ_IOSCHED_KYBER=y" >> arch/arm64/configs/gki_defconfig
+          # Включение производительного планировщика CPU (Performance)
+          echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> "$CONFIG_FILE"
 
-          # Регенерация дефконфига под стандарты Bazel/Kleaf
-          make ARCH=arm64 defconfig
-          make ARCH=arm64 savedefconfig
-          cp defconfig arch/arm64/configs/gki_defconfig
+          # Включение Multi-Gen LRU (MGLRU) для оптимизации работы памяти
+          echo "CONFIG_LRU_GEN=y" >> "$CONFIG_FILE"
+          echo "CONFIG_LRU_GEN_ENABLED=y" >> "$CONFIG_FILE"
+
+          # Включение планировщика ввода-вывода Kyber для ускорения флеш-памяти UFS
+          echo "CONFIG_MQ_IOSCHED_KYBER=y" >> "$CONFIG_FILE"
+
+          # Обновление и регенерация defconfig через Bazel/Kleaf
+          cd kernel
+          tools/bazel run //common:gki_defconfig -- --update
 
       - name: Compile GKI Kernel
         run: |
@@ -87,15 +90,15 @@ jobs:
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
 
-          # Копирование собранного ядра Image
+          # Копирование скомпилированного ядра
           cp dist/Image AnyKernel3/
 
-          # Патчинг конфигурации AnyKernel3
+          # Патчинг anykernel.sh под универсальный GKI флешер
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
           sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot;/block=auto;/g' AnyKernel3/anykernel.sh
           sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
 
-          # Создание архива без лишних метаданных
+          # Создание архива без лишних файлов репозитория
           cd AnyKernel3
           zip -r9 ../custom-gki-kernel.zip * -x .git* README.md *placeholder
           cd ..
