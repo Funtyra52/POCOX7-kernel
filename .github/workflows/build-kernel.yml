@@ -49,36 +49,31 @@ jobs:
           cd kernel
 
           git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@://github.com"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global color.ui false
 
-          repo init -u https://googlesource.com -b common-android-mainline --depth=1 --no-repo-verify
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android-mainline --depth=1 --no-repo-verify
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
       - name: Integrate KernelSU Next
         run: |
           cd kernel/common
-          curl -LSs https://githubusercontent.com | bash -s next
+          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s next
 
       - name: Apply Performance Tweaks
         run: |
-          CONFIG_FILE="kernel/common/arch/arm64/configs/gki_defconfig"
+          cd kernel/common
 
           # Отключение стандартного schedutil
-          sed -i 's/CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y/# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set/' "$CONFIG_FILE"
+          sed -i 's/CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y/# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set/' arch/arm64/configs/gki_defconfig
 
-          # Включение производительного планировщика CPU (Performance)
-          echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> "$CONFIG_FILE"
+          # Добавление производительного шедулера, MGLRU и Kyber I/O
+          echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_LRU_GEN=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_LRU_GEN_ENABLED=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_MQ_IOSCHED_KYBER=y" >> arch/arm64/configs/gki_defconfig
 
-          # Включение Multi-Gen LRU (MGLRU) для оптимизации работы ОЗУ
-          echo "CONFIG_LRU_GEN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_LRU_GEN_ENABLED=y" >> "$CONFIG_FILE"
-
-          # Включение планировщика ввода-вывода Kyber для ускорения UFS флеш-памяти
-          echo "CONFIG_MQ_IOSCHED_KYBER=y" >> "$CONFIG_FILE"
-
-          # ФИКС ОШИБКИ BAZEL: Принудительно регенерируем gki_defconfig по правилам Google
-          cd kernel/common
+          # Регенерация дефконфига под стандарты Bazel/Kleaf
           make ARCH=arm64 defconfig
           make ARCH=arm64 savedefconfig
           cp defconfig arch/arm64/configs/gki_defconfig
@@ -90,17 +85,17 @@ jobs:
 
       - name: Pack Kernel into AnyKernel3 Zip
         run: |
-          git clone https://github.com AnyKernel3
+          git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
 
-          # Копирование собранного ядра
+          # Копирование собранного ядра Image
           cp dist/Image AnyKernel3/
 
-          # Настройка скрипта прошивальщика под универсальный GKI-формат
+          # Патчинг конфигурации AnyKernel3
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
           sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot;/block=auto;/g' AnyKernel3/anykernel.sh
           sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
 
-          # Упаковка в zip-архив
+          # Создание архива без лишних метаданных
           cd AnyKernel3
           zip -r9 ../custom-gki-kernel.zip * -x .git* README.md *placeholder
           cd ..
