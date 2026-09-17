@@ -45,14 +45,14 @@ jobs:
 
       - name: Sync Android GKI Source
         run: |
+          mkdir -p kernel
+          cd kernel
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global color.ui false
 
-          mkdir -p kernel
-          cd kernel
-
-          repo init -u https://android.googlesource.com/kernel/manifest -b android14-6.1-2025-06 --depth=1 --no-repo-verify
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android-mainline --depth=1 --no-repo-verify
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
       - name: Integrate KernelSU Next
@@ -64,15 +64,17 @@ jobs:
         run: |
           CONFIG_FILE="kernel/common/arch/arm64/configs/gki_defconfig"
 
-          # Отключаем дефолтный schedutil и переключаем на performance
+          # Отключение стандартного schedutil
           sed -i 's/CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y/# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set/' "$CONFIG_FILE"
+
+          # Включение производительного планировщика CPU (Performance)
           echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> "$CONFIG_FILE"
 
-          # Включение Multi-Gen LRU (MGLRU)
+          # Включение Multi-Gen LRU (MGLRU) для оптимизации работы ОЗУ
           echo "CONFIG_LRU_GEN=y" >> "$CONFIG_FILE"
           echo "CONFIG_LRU_GEN_ENABLED=y" >> "$CONFIG_FILE"
 
-          # Включение Kyber I/O Scheduler для ускорения накопителей UFS/NVMe
+          # Включение планировщика ввода-вывода Kyber для ускорения UFS флеш-памяти
           echo "CONFIG_MQ_IOSCHED_KYBER=y" >> "$CONFIG_FILE"
 
       - name: Compile GKI Kernel
@@ -83,16 +85,16 @@ jobs:
       - name: Pack Kernel into AnyKernel3 Zip
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-          
-          # Копируем скомпилированное ядро Image в AnyKernel3
+
+          # Копирование собранного ядра
           cp dist/Image AnyKernel3/
 
-          # Настройка anykernel.sh под универсальный флешер GKI
+          # Настройка скрипта прошивальщика под универсальный GKI-формат
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
           sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot;/block=auto;/g' AnyKernel3/anykernel.sh
           sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
 
-          # Создание архива
+          # Упаковка в zip-архив
           cd AnyKernel3
           zip -r9 ../custom-gki-kernel.zip * -x .git* README.md *placeholder
           cd ..
@@ -100,6 +102,6 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Custom-GKI-6.1.138-Malachite
+          name: Custom-GKI-6.1-Malachite
           path: custom-gki-kernel.zip
           retention-days: 7
