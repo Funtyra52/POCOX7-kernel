@@ -30,8 +30,12 @@ jobs:
           mkdir kernel && cd kernel
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          # Инициализируем манифест стабильной ветки Google GKI 6.1
-          repo init -u https://android.googlesource.com/kernel/manifest -b android6.1-2024-05 --depth=1
+          
+          # Фикс для предотвращения ошибок самообновления утилиты repo
+          export REPO_ALLOW_SHALLOW=1
+          
+          # Инициализируем основную стабильную ветку ядра GKI 6.1 напрямую с фиксацией версии repo-лаунчера
+          repo init -u https://googlesource.com -b android6.1-main --depth=1 --repo-rev=v2.45
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
       - name: Integrate KernelSU Next
