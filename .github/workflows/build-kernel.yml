@@ -43,62 +43,68 @@ jobs:
             xz-utils \
             zip
 
+      - name: Cache Android GKI Source
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: kernel/
+          key: gki-kernel-cache-common-android-mainline
+
       - name: Sync Android GKI Source
         run: |
-          mkdir -p kernel
-          cd kernel
-
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global color.ui false
 
-          repo init -u https://android.googlesource.com/kernel/manifest -b common-android-mainline --depth=1 --no-repo-verify
-          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+          if [ -d "kernel/.repo" ]; then
+            echo "Исходный код найден в кэше. Пропуск repo init и repo sync."
+          else
+            echo "Кэш не найден. Запуск загрузки исходного кода GKI..."
+            mkdir -p kernel
+            cd kernel
+            repo init -u https://android.googlesource.com/kernel/manifest -b common-android-mainline --depth=1 --no-repo-verify
+            repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+            cd ..
+          fi
 
       - name: Integrate KernelSU Next
         run: |
           cd kernel/common
-          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s main
+          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -s master
 
       - name: Apply Performance Tweaks
         run: |
           CONFIG_FILE="kernel/common/arch/arm64/configs/gki_defconfig"
 
-          # Отключение стандартного планировщика Schedutil
+          # Отключение стандартного schedutil
           sed -i 's/CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y/# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set/' "$CONFIG_FILE"
 
-          # Включение высокопроизводительного шедулера CPU Performance
-          echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> "$CONFIG_FILE"
-
-          # Включение Multi-Gen LRU (MGLRU)
-          echo "CONFIG_LRU_GEN=y" >> "$CONFIG_FILE"
-          echo "CONFIG_LRU_GEN_ENABLED=y" >> "$CONFIG_FILE"
-
-          # Включение очереди ввода-вывода Kyber для флеш-памяти UFS
-          echo "CONFIG_MQ_IOSCHED_KYBER=y" >> "$CONFIG_FILE"
-
-          # Регенерация и синхронизация defconfig через Kleaf/Bazel
-          cd kernel
-          tools/bazel run //common:gki_defconfig -- --update
+          # Добавление флагов производительности, MGLRU и шедулера Kyber
+          cat << 'EOF' >> "$CONFIG_FILE"
+          CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y
+          CONFIG_LRU_GEN=y
+          CONFIG_LRU_GEN_ENABLED=y
+          CONFIG_MQ_IOSCHED_KYBER=y
+          EOF
 
       - name: Compile GKI Kernel
         run: |
           cd kernel
-          tools/bazel run //common:kernel_aarch64_dist --jobs=2 --local_ram_resources=HOST_RAM*0.5 -- --dist_dir=../dist
+          tools/bazel run --config=fast //common:kernel_aarch64_dist --jobs=2 --local_ram_resources=HOST_RAM*0.5 -- --dist_dir=../dist
 
       - name: Pack Kernel into AnyKernel3 Zip
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
 
-          # Копирование скомпилированного образа ядра
+          # Копирование собранного ядра
           cp dist/Image AnyKernel3/
 
-          # Патчинг скрипта под универсальный формат GKI
+          # Универсальный патчинг конфигурации AnyKernel3 для GKI
           sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
           sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot;/block=auto;/g' AnyKernel3/anykernel.sh
           sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
 
-          # Сборка архива
+          # Создание архива без лишних служебных файлов
           cd AnyKernel3
           zip -r9 ../custom-gki-kernel.zip * -x .git* README.md *placeholder
           cd ..
