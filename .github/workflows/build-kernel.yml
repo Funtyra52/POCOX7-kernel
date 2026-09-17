@@ -1,93 +1,79 @@
-name: Build Kernel
+name: Build Custom GKI 6.1
+
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Позволяет запускать сборку вручную кнопкой
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Space
+      - name: Checkout Builder
+        uses: actions/checkout@v4
+
+      - name: Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 8192
-          temp-reserve-mb: 4096
+          temp-reserve-mb: 2048
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
+          remove-codeql: 'true'
 
-      - name: Deps
+      - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev libelf-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git clang lld
+          sudo apt-get install -y bc bison build-essential ccache curl flex glibc-source libelf-dev libssl-dev libxml2-utils lz4 ninja-build repo rsync u-boot-tools xz-utils zip
 
-      - name: Clone Kernel
-        uses: actions/checkout@v4
-        with:
-          repository: 'MiCode/Xiaomi_Kernel_OpenSource'
-          ref: 'malachite-u-oss'
-          path: 'kernel-source'
-
-      - name: Clone Build Tool
-        uses: actions/checkout@v4
-        with:
-          repository: 'MiCode/kernel_build'
-          ref: 'malachite-u-oss'
-          path: 'kernel-build-tool'
-
-      - name: KSU
+      - name: Sync Android GKI Common Source
         run: |
-          cd kernel-source
-          P1="https://githubusercontent.com"
-          P2="/tiann/KernelSU"
-          P3="/main/kernel/setup.sh"
-          curl -LSs "${P1}${P2}${P3}" | bash -
+          mkdir kernel && cd kernel
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          # Инициализируем манифест стабильной ветки Google GKI 6.1
+          repo init -u https://android.googlesource.com/kernel/manifest -b android6.1-2024-05 --depth=1
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
-      - name: Build
+      - name: Integrate KernelSU Next
         run: |
-          # Переносим инструмент сборки Xiaomi в правильную папку внутри ядра
-          mkdir -p kernel-source/build
-          cp -r kernel-build-tool/* kernel-source/build/
-          
-          cd kernel-source
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export HEADER_ARCH=arm64
-          export CC=clang
-          export LD=ld.lld
-          export AR=llvm-ar
-          export NM=llvm-nm
-          export OBJCOPY=llvm-objcopy
-          export OBJDUMP=llvm-objdump
-          export STRIP=llvm-strip
-          export HOSTCC=clang
-          export HOSTCXX=clang++
-          export HOSTAR=llvm-ar
-          export HOSTLD=ld.lld
-          
-          # Настраиваем gki_defconfig через встроенный инструмент
-          make gki_defconfig
-          
-          # Отключаем проблемную подсистему BTF-отладки
-          echo "CONFIG_DEBUG_INFO_BTF=n" >> .config
-          echo "# CONFIG_DEBUG_INFO_BTF is not set" >> .config
-          
-          # Включаем KernelSU
-          echo "CONFIG_KSU=y" >> .config
-          
-          # ФИЗИЧЕСКИЙ РАЗГОН: заменяем лимиты частот в сгенерированном файле конфигурации
-          sed -i 's/2500000/2700000/g' include/generated/autoconf.h 2>/dev/null || true
-          sed -i 's/2000000/2250000/g' include/generated/autoconf.h 2>/dev/null || true
-          
-          # Заставляем планировщик заблокировать эти новые повышенные частоты
-          echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> .config
-          echo "CONFIG_CPU_FREQ_GOV_PERFORMANCE=y" >> .config
-          
-          # Запускаем скрипт сборщика Xiaomi, который сам правильно соберёт все заголовки
-          chmod +x build/build.sh
-          build/build.sh
+          cd kernel/common
+          # Встраиваем актуальные исходники KernelSU Next на уровне ядра
+          curl -LSs "https://githubusercontent.com" | bash -s next
 
-      - name: Upload
+      - name: Apply Low-Level Performance Tweaks
+        run: |
+          cd kernel/common
+          # 1. Меняем дефолтный планировщик с ленивого schedutil на агрессивный Performance
+          sed -i 's/CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y/# CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL is not set/g' arch/arm64/configs/gki_defconfig
+          echo "CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y" >> arch/arm64/configs/gki_defconfig
+          
+          # 2. Принудительно заставляем оперативную память использовать оптимизированный MGLRU
+          echo "CONFIG_LRU_GEN=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_LRU_GEN_ENABLED=y" >> arch/arm64/configs/gki_defconfig
+          
+          # 3. Твик планировщика ввода-вывода (IO) для ускорения UFS-памяти смартфона
+          echo "CONFIG_MQ_IOSCHED_KYBER=y" >> arch/arm64/configs/gki_defconfig
+
+      - name: Compile GKI Kernel (Bazel / Kleaf)
+        run: |
+          cd kernel
+          # Запуск официального компилятора Google Clang через систему сборки Kleaf
+          tools/bazel run //common:kernel_aarch64_dist -- --dist_dir=../dist
+
+      - name: Pack Kernel into AnyKernel3 Zip
+        run: |
+          git clone https://github.com
+          cd AnyKernel3
+          # Копируем скомпилированный чистый файл ядра
+          cp ../dist/Image .
+          # Быстрая конфигурация скрипта установки AnyKernel3 под GKI
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' anykernel.sh
+          sed -i 's/block=\/dev\/block\/bootdevice\/by-name\/boot;/block=auto;/g' anykernel.sh
+          sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' anykernel.sh
+          zip -r ../custom-gki-kernel.zip *
+
+      - name: Upload Finished Flashable Zip
         uses: actions/upload-artifact@v4
         with:
-          name: Poco_X7_Kernel
-          path: kernel-source/out/android*/dist/Image
+          name: Custom-GKI-6.1-Malachite
+          path: custom-gki-kernel.zip
