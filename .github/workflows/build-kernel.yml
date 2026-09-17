@@ -31,21 +31,17 @@ jobs:
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           
-          # Отключаем принудительное обновление утилиты repo
           export REPO_ALLOW_SHALLOW=1
           
-          # Безопасная склейка ссылки на манифест Google
-          GOOGLE_SOURCE="://googlesource.com"
-          repo init -u https://$GOOGLE_SOURCE/kernel/manifest -b common-android-mainline --depth=1 --no-repo-verify
+          # Инициализируем через сокращенный синтаксис без протокола https:// чтобы интерфейс не резал адрес
+          repo init -u ://googlesource.com -b common-android-mainline --depth=1 --no-repo-verify
           repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
       - name: Integrate KernelSU Next
         run: |
           cd kernel/common
-          # Безопасная склейка ссылки на скрипт KernelSU Next
-          RAW_HUB="://githubusercontent.com"
-          KSU_PATH="rifsxd/KernelSU-Next/next/kernel/setup.sh"
-          curl -LSs "https://$RAW_HUB/$KSU_PATH" | bash -s next
+          # Качаем скрипт через curl, убрав протокол из текстовой строки (curl сам поймет)
+          curl -LSs ://googlesource.com ://githubusercontent.com | bash -s next || curl -LSs ://githubusercontent.com | bash -s next
 
       - name: Apply Low-Level Performance Tweaks
         run: |
@@ -69,10 +65,8 @@ jobs:
 
       - name: Pack Kernel into AnyKernel3 Zip
         run: |
-          # Безопасная склейка ссылки на AnyKernel3
-          GH_HOST="github.com"
-          REPO_PATH="osm0sis/AnyKernel3"
-          git clone https://$GH_HOST/$REPO_PATH.git
+          # Клонируем гит-репозиторий без протокола https://
+          git clone ://github.com AnyKernel3
           
           cd AnyKernel3
           cp ../dist/Image .
